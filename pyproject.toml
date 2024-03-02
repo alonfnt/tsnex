@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tsnex"
+version = "0.0.1"
+description = "Minimal t-distributed stochastic neighbor embedding (t-SNE) implementation in JAX."
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+    {name = "Albert Alonso", email = "alonfnt@pm.me"},
+    {name = "Antonio Matas Gil"}
+]
+license = {file = "LICENSE"}
+keywords = ["jax", "tsne", "python", "data-visualization"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/alonfnt/tsnex"
+"Documentation" = "https://github.com/alonfnt/tsnex"
+"Source" = "https://github.com/alonfnt/tsnex"
+"Bug Tracker" = "https://github.com/alonfnt/tsnex/issues"
