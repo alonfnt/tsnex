@@ -35,12 +35,13 @@ def test_euclidean_distance(x, y, expected):
 @pytest.mark.parametrize(
     "x,y,sigma,expected",
     [
-        (jnp.array([0, 0]), jnp.array([1, 1]), 1, jnp.exp(-1)),
+        (jnp.array([0, 0]), jnp.array([1, 1]), 1, jnp.array([0.5, 0.5])),
     ],
 )
 def test_probability_fn(x, y, sigma, expected):
-    result = tsnex.tsne.probability_fn(x, y, sigma)
-    assert jnp.isclose(result, expected, atol=1e-6)
+    distances = jnp.sqrt(jnp.sum((x[None, :] - y[:, None]) ** 2, axis=-1))
+    result = tsnex.tsne._conditional_probability(distances, sigma)
+    assert jnp.allclose(result, expected, atol=1e-6)
 
 
 @pytest.mark.parametrize("init_method", ["pca", "random"])
