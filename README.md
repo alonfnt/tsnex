@@ -1,4 +1,4 @@
-# TSNEx
+# tSNEx
 
 **TSNEx** is a lightweight, high-performance Python library for t-Distributed Stochastic Neighbor Embedding (t-SNE) built on top of JAX. Leveraging the power of JAX, `tsnex` offers JIT compilation, automatic differentiation, and hardware acceleration support to efficiently handle high-dimensional data for visualization and clustering tasks.
 
@@ -22,6 +22,17 @@ X_embedded = tsnex.transform(X, n_components=2)
 
 ## Contributing
 We welcome contributions to **TSNEx**! Whether it's adding new features, improving documentation, or reporting issues, please feel free to make a pull request and/or open an issue.
+
+## Citation
+If you use `tsnex` in your research and need to reference it, please cite it as follows:
+```
+@software{alonso_tsnex,
+  author = {Alonso, Albert},
+  title = {tsnex: Minimal t-distributed stochastic neighbor embedding (t-SNE) implementation in JAX},
+  url = {https://github.com/alonfnt/tsnex},
+  version = {0.0.1}
+}
+```
 
 ## License
 TSNEx is licensed under the MIT License. See the ![LICENSE](LICENSE) file for more details.
