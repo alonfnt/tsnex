@@ -1,5 +1,6 @@
 from functools import partial
 from typing import Callable
+from typing import Optional
 import jax
 import jax.numpy as jnp
 
@@ -71,6 +72,7 @@ def _binary_search_perplexity(distances, target, tol=1e-5, max_iter=200):
         "n_iter",
         "metric_fn",
         "early_exageration",
+        "batch_size",
     ],
 )
 def transform(
@@ -84,6 +86,7 @@ def transform(
     n_iter: int = 1000,
     metric_fn: Callable = euclidean_distance,
     early_exageration: float = 12.0,
+    batch_size: Optional[int] = None,
 ) -> jax.Array:
     """
     Transform X to a lower dimensional representation using T-distributed Stochastic Neighbor Embedding.
@@ -110,11 +113,14 @@ def transform(
     else:
         raise ValueError(f"Unknown init_method: {init}")
 
-    metric_fn = jax.vmap(jax.vmap(metric_fn, in_axes=(0, None)), in_axes=(None, 0))
-
     # Compute the probability of neighbours on the original embedding.
     # The matrix needs to be symetrized in order to be used as joint probability.
-    distances = metric_fn(X, X)
+    batch_size = batch_size or len(X)
+    distances = jax.lax.map(
+        lambda xi: jax.lax.map(lambda xj: metric_fn(xi, xj), X, batch_size=batch_size),
+        X,
+        batch_size=batch_size
+    )
     sigma = _binary_search_perplexity(distances, perplexity)
     P = _joint_probability(distances, sigma)
 
