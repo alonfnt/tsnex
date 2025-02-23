@@ -10,7 +10,6 @@ readme = "README.md"
 requires-python = ">=3.10"
 authors = [
     {name = "Albert Alonso", email = "alonfnt@pm.me"},
-    {name = "Antonio Matas Gil"}
 ]
 license = {file = "LICENSE"}
 keywords = ["jax", "tsne", "python", "data-visualization"]
@@ -20,6 +19,7 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
 ]
+dependencies = ["jax", "pcax", ]
 
 [tool.setuptools.dynamic]
 version = {attr = "tsnex.__version__"}
