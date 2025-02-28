@@ -7,7 +7,7 @@ import pcax
 
 
 def kl_divergence(p, q, *, eps=1e-12):
-    return jnp.sum(p * jnp.log((p+eps) / (q+eps)))
+    return jnp.sum(p * jnp.log((p + eps) / (q + eps)))
 
 
 def euclidean_distance(x, y):
@@ -15,7 +15,7 @@ def euclidean_distance(x, y):
 
 
 def shannon_entropy(p, *, eps=1e-12):
-    return -jnp.sum(p * jnp.log2(p + eps))
+    return -jnp.sum(p * jnp.log2(p + eps), axis=1)
 
 
 def perplexity_fun(p):
@@ -23,8 +23,8 @@ def perplexity_fun(p):
 
 
 def _conditional_probability(distances, sigma, *, eps=1e-12):
-    p = jnp.exp(-distances / (2 * sigma**2))
-    p = p.at[jnp.diag_indices(p.shape[0])].set(0)
+    p = jnp.exp(-distances / (2 * sigma[:, None] ** 2))
+    p = jnp.fill_diagonal(p, 0, inplace=False)
     p = p / (jnp.sum(p, axis=1, keepdims=True) + eps)
     return p
 
@@ -35,28 +35,35 @@ def _joint_probability(distances, sigma):
     return p
 
 
-def _binary_search_perplexity(distances, target, tol=1e-5, max_iter=200, sigma_min=1e-10, sigma_max=1e10):
+def _binary_search_perplexity(distances, target, tol=1e-5, max_iter=200):
 
-    sigma = 1.0
+    n = distances.shape[0]
+    sigma = jnp.ones((n,))
+    sigma_min = jnp.full((n,), 1e-10)
+    sigma_max = jnp.full((n,), 1e10)
 
     def cond_fun(val):
         (_, perplexity, i, _, _) = val
-        return (jnp.abs(perplexity - target) > tol) & (i < max_iter)
+        return jnp.all(jnp.abs(perplexity - target) > tol) & (i < max_iter)
 
     def body_fun(val):
         (sigma, perp, i, sigma_min, sigma_max) = val
         p = _conditional_probability(distances, sigma)
         perp = perplexity_fun(p)
-        sigma = jnp.where(perp > target, (sigma + sigma_min) / 2, (sigma + sigma_max) / 2)
-        sigma_min = jnp.where(perp > target, sigma_min, sigma)
-        sigma_max = jnp.where(perp > target, sigma, sigma_max)
-        return (sigma, perp, i + 1, sigma_min, sigma_max)
+
+        mask = perp > target
+        sigma_new = jnp.where(mask, (sigma + sigma_min) / 2, (sigma + sigma_max) / 2)
+
+        sigma_min = jnp.where(mask, sigma_min, sigma)
+        sigma_max = jnp.where(mask, sigma, sigma_max)
+        return (sigma_new, perp, i + 1, sigma_min, sigma_max)
 
     p = _conditional_probability(distances, sigma)
     perplexity = perplexity_fun(p)
     init_val = (sigma, perplexity, 0, sigma_min, sigma_max)
     sigma = jax.lax.while_loop(cond_fun, body_fun, init_val)[0]
     return sigma
+
 
 def all_to_all(f: Callable, batch_size: int | None = None) -> Callable:
     """
@@ -69,12 +76,12 @@ def all_to_all(f: Callable, batch_size: int | None = None) -> Callable:
     Returns:
         A function g(x, y) -> matrix, where g applies f to each pair (xi, yj).
     """
+
     def g(x, y):
         return jax.lax.map(
-            lambda i: jax.vmap(f, in_axes=(None, 0))(i, y),
-            x,
-            batch_size=batch_size
+            lambda i: jax.vmap(f, in_axes=(None, 0))(i, y), x, batch_size=batch_size
         )
+
     return jax.jit(g)
 
 
@@ -97,7 +104,7 @@ def transform(
     *,
     n_components: int = 2,
     perplexity: float = 30.0,
-    learning_rate: float = 1e-3,
+    learning_rate: float | str = "auto",
     init: str = "pca",
     seed: int = 0,
     n_iter: int = 1000,
@@ -112,7 +119,7 @@ def transform(
         X: The input data.
         n_components: The number of output components.
         perplexity: The perplexity of the distribution.
-        learning_rate: The learning rate of the optimizer.
+        learning_rate: The learning rate of the optimizer. (auto => max(N/12, 50)) 
         init: The initialization method ("pca" or "random").
         seed: The random seed.
         n_iter: The number of optimization steps.
@@ -131,33 +138,35 @@ def transform(
     else:
         raise ValueError(f"Unknown init_method: {init}")
 
+    if learning_rate == "auto":
+        learning_rate = max(len(X) / 12, 50)
+
     # Compute the probability of neighbours on the original embedding.
     # The matrix needs to be symetrized in order to be used as joint probability.
     batch_size = batch_size or len(X)
-    _metric_fn = all_to_all(metric_fn, batch_size=batch_size)
-    distances = _metric_fn(X, X)
+    pairwise_distance = all_to_all(metric_fn, batch_size=batch_size)
+    distances = pairwise_distance(X, X)
     sigma = _binary_search_perplexity(distances, perplexity)
     P = _joint_probability(distances, sigma)
 
     @jax.grad
-    def loss_fn(x, P):
-        distances = _metric_fn(x, x)
-        Q = jax.nn.softmax(-distances)
+    def kl_div_loss(x, P):
+        distances = pairwise_distance(x, x)
+        q = (1 + distances) ** -1
+        q = jnp.fill_diagonal(q, 0, inplace=False)
+        Q = q / jnp.sum(q)
         return kl_divergence(P, Q)
 
-    def train_step(x, _):
-        grads = loss_fn(x, P)
+    def train_step(x, _, early=False):
+        w = early_exageration if early else 1.0
+        grads = kl_div_loss(x, w * P)
         x_new = x - learning_rate * grads
         return x_new, None
 
-    def train_step_early_exageration(x, _):
-        grads = loss_fn(x, early_exageration * P)
-        x_new = x - learning_rate * grads
-        return x_new, None
-
-    n_exageration = 250
-    X_new, _ = jax.lax.scan(train_step_early_exageration, X_new, xs=None, length=n_exageration)
-
+    n_exageration = 300
+    X_new, _ = jax.lax.scan(
+        partial(train_step, early=True), X_new, xs=None, length=n_exageration
+    )
     X_new, _ = jax.lax.scan(train_step, X_new, xs=None, length=n_iter)
 
     return X_new
