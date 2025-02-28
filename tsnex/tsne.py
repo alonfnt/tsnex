@@ -1,31 +1,31 @@
 from functools import partial
 from typing import Callable
-from typing import Optional
 import jax
 import jax.numpy as jnp
 
 import pcax
 
 
-def kl_divergence(p, q):
-    return jnp.sum(p * jnp.log(p / q))
+def kl_divergence(p, q, *, eps=1e-12):
+    return jnp.sum(p * jnp.log((p+eps) / (q+eps)))
 
 
 def euclidean_distance(x, y):
     return jnp.sum((x - y) ** 2, axis=-1)
 
 
-def shannon_entopy(p, eps=1e-12):
+def shannon_entropy(p, *, eps=1e-12):
     return -jnp.sum(p * jnp.log2(p + eps))
 
 
 def perplexity_fun(p):
-    return 2 ** shannon_entopy(p)
+    return 2 ** shannon_entropy(p)
 
 
-def _conditional_probability(distances, sigma):
+def _conditional_probability(distances, sigma, *, eps=1e-12):
     p = jnp.exp(-distances / (2 * sigma**2))
-    p = p / jnp.sum(p)
+    p = p.at[jnp.diag_indices(p.shape[0])].set(0)
+    p = p / (jnp.sum(p, axis=1, keepdims=True) + eps)
     return p
 
 
@@ -35,10 +35,8 @@ def _joint_probability(distances, sigma):
     return p
 
 
-def _binary_search_perplexity(distances, target, tol=1e-5, max_iter=200):
+def _binary_search_perplexity(distances, target, tol=1e-5, max_iter=200, sigma_min=1e-10, sigma_max=1e10):
 
-    sigma_min = 1e-20
-    sigma_max = 1e20
     sigma = 1.0
 
     def cond_fun(val):
@@ -59,6 +57,25 @@ def _binary_search_perplexity(distances, target, tol=1e-5, max_iter=200):
     init_val = (sigma, perplexity, 0, sigma_min, sigma_max)
     sigma = jax.lax.while_loop(cond_fun, body_fun, init_val)[0]
     return sigma
+
+def all_to_all(f: Callable, batch_size: int | None = None) -> Callable:
+    """
+    Transforms a scalar function f(x, y) -> scalar into one that operates over two arrays.
+
+    Args:
+        f: A function f(x, y) -> scalar.
+        batch_size: Optional batch size for batching.
+
+    Returns:
+        A function g(x, y) -> matrix, where g applies f to each pair (xi, yj).
+    """
+    def g(x, y):
+        return jax.lax.map(
+            lambda i: jax.vmap(f, in_axes=(None, 0))(i, y),
+            x,
+            batch_size=batch_size
+        )
+    return jax.jit(g)
 
 
 @partial(
@@ -86,21 +103,22 @@ def transform(
     n_iter: int = 1000,
     metric_fn: Callable = euclidean_distance,
     early_exageration: float = 12.0,
-    batch_size: Optional[int] = None,
+    batch_size: int | None = None,
 ) -> jax.Array:
     """
-    Transform X to a lower dimensional representation using T-distributed Stochastic Neighbor Embedding.
+    Transforms X to a lower-dimensional representation using t-SNE.
 
     Args:
         X: The input data.
-        n_components: The number of components of the output.
-        perplexity: The perplexity of the conditional probability distribution.
-        learning_rate: The learning rate of the optimization algorithm.
-        init: The initialization method. Can be "pca" or "random".
-        seed: The seed for the random number generator.
-        n_iter: The number of iterations.
-        metric_fn: The metric function to use. By default, it uses the euclidean distance.
-        early_exageration: The early exageration factor.
+        n_components: The number of output components.
+        perplexity: The perplexity of the distribution.
+        learning_rate: The learning rate of the optimizer.
+        init: The initialization method ("pca" or "random").
+        seed: The random seed.
+        n_iter: The number of optimization steps.
+        metric_fn: The metric function (defaults to euclidean_distance).
+        early_exageration: The early exaggeration factor.
+        batch_size: Optional batch size.
 
     Returns:
         The transformed data.
@@ -116,17 +134,14 @@ def transform(
     # Compute the probability of neighbours on the original embedding.
     # The matrix needs to be symetrized in order to be used as joint probability.
     batch_size = batch_size or len(X)
-    distances = jax.lax.map(
-        lambda xi: jax.lax.map(lambda xj: metric_fn(xi, xj), X, batch_size=batch_size),
-        X,
-        batch_size=batch_size
-    )
+    _metric_fn = all_to_all(metric_fn, batch_size=batch_size)
+    distances = _metric_fn(X, X)
     sigma = _binary_search_perplexity(distances, perplexity)
     P = _joint_probability(distances, sigma)
 
     @jax.grad
     def loss_fn(x, P):
-        distances = metric_fn(x, x)
+        distances = _metric_fn(x, x)
         Q = jax.nn.softmax(-distances)
         return kl_divergence(P, Q)
 
