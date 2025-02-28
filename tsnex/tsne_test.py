@@ -32,17 +32,26 @@ def test_euclidean_distance(x, y, expected):
     assert jnp.isclose(result, expected)
 
 
+
 @pytest.mark.parametrize(
-    "x,y,sigma,expected",
+    "x, sigma, expected",
     [
-        (jnp.array([0, 0]), jnp.array([1, 1]), 1, jnp.array([0.5, 0.5])),
+        (
+            jnp.array([[0.0, 0.0], [2.0, 0.0], [4.0, 0.0]]),
+            2.0,
+            jnp.array([
+                [0.0, 0.82, 0.18],
+                [0.5, 0.0, 0.5],
+                [0.18, 0.82, 0.0],
+            ]),
+        ),
     ],
 )
-def test_probability_fn(x, y, sigma, expected):
-    distances = jnp.sqrt(jnp.sum((x[None, :] - y[:, None]) ** 2, axis=-1))
+def test_probability_fn(x, sigma, expected):
+    sum_x = jnp.sum(jnp.square(x), axis=1, keepdims=True)
+    distances = sum_x + sum_x.T - 2 * jnp.dot(x, x.T)
     result = tsnex.tsne._conditional_probability(distances, sigma)
-    assert jnp.allclose(result, expected, atol=1e-6)
-
+    assert jnp.allclose(result, expected, atol=1e-2)
 
 @pytest.mark.parametrize("init_method", ["pca", "random"])
 def test_transform_shape_and_locality(init_method):
@@ -56,3 +65,9 @@ def test_transform_invalid_init():
     key = jax.random.key(0)
     with pytest.raises(ValueError):
         tsnex.transform(jax.random.uniform(key, shape=(10, 5)), init="invalid_init")
+    
+def test_nan_output():
+    key = jax.random.key(0)
+    X = jax.random.normal(key, shape=(100, 50))
+    X_transformed = tsnex.transform(X, n_components=2)
+    assert not jnp.isnan(X_transformed).any()
