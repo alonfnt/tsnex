@@ -38,7 +38,7 @@ def test_euclidean_distance(x, y, expected):
     [
         (
             jnp.array([[0.0, 0.0], [2.0, 0.0], [4.0, 0.0]]),
-            2.0,
+            jnp.array([2.0, 2.0, 2.0]),
             jnp.array([
                 [0.0, 0.82, 0.18],
                 [0.5, 0.0, 0.5],
