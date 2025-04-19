@@ -1,5 +1,5 @@
 <p align=center>
-  <img src="https://github.com/user-attachments/assets/02da44bf-4250-44b2-a480-a6f0342ca73e" width="640" />
+  <img src="https://github.com/user-attachments/assets/02da44bf-4250-44b2-a480-a6f0342ca73e" style="width: 640px; height: auto;"/>
 </p>
 
 [![tests](https://github.com/alonfnt/pcax/actions/workflows/pytest.yml/badge.svg)](https://github.com/alonfnt/tsnex/actions/workflows/pytest.yml)
@@ -41,5 +41,5 @@ If you use `tsnex` in your research and need to reference it, please cite it as 
 ```
 
 ## License
-TSNEx is licensed under the MIT License. See the ![LICENSE](LICENSE) file for more details.
+TSNEx is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
 
