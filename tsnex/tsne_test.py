@@ -65,9 +65,26 @@ def test_transform_invalid_init():
     key = jax.random.key(0)
     with pytest.raises(ValueError):
         tsnex.transform(jax.random.uniform(key, shape=(10, 5)), init="invalid_init")
-    
+
+
 def test_nan_output():
     key = jax.random.key(0)
     X = jax.random.normal(key, shape=(100, 50))
     X_transformed = tsnex.transform(X, n_components=2)
     assert not jnp.isnan(X_transformed).any()
+
+
+@pytest.mark.parametrize("target", [5.0, 30.0])
+def test_binary_search_reaches_target_perplexity_for_every_point(target):
+    t = 4 * jnp.pi * jnp.linspace(0, 1, 300) ** 2
+    W = jax.random.normal(jax.random.key(0), (4, 50))
+    X = jnp.stack([jnp.cos(t), jnp.sin(t), jnp.cos(2 * t), t / 4], axis=1) @ W
+
+    distances = tsnex.tsne.euclidean_distance(X[:, None], X[None])
+    sigma = tsnex.tsne._binary_search_perplexity(distances, target)
+    p = tsnex.tsne._conditional_probability(distances, sigma)
+    perplexity = tsnex.tsne.perplexity_fun(p)
+
+    assert jnp.allclose(perplexity, target, rtol=1e-3), (
+        f"perplexity range [{perplexity.min():.2f}, {perplexity.max():.2f}], target {target}"
+    )

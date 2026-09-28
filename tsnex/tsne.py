@@ -44,7 +44,7 @@ def _binary_search_perplexity(distances, target, tol=1e-5, max_iter=200):
 
     def cond_fun(val):
         (_, perplexity, i, _, _) = val
-        return jnp.all(jnp.abs(perplexity - target) > tol) & (i < max_iter)
+        return jnp.any(jnp.abs(perplexity - target) > tol) & (i < max_iter)
 
     def body_fun(val):
         (sigma, perp, i, sigma_min, sigma_max) = val
