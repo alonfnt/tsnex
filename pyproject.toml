@@ -24,6 +24,9 @@ dependencies = ["jax", "pcax", ]
 [tool.setuptools.dynamic]
 version = {attr = "tsnex.__version__"}
 
+[project.optional-dependencies]
+dev = ["pytest"]
+
 [project.urls]
 "Homepage" = "https://github.com/alonfnt/tsnex"
 "Documentation" = "https://github.com/alonfnt/tsnex"
